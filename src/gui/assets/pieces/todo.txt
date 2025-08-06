@@ -1,0 +1,1 @@
+# TODO: Sub-directory for piece images (e.g., white_pawn.png)

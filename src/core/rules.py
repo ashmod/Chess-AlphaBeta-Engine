@@ -1,0 +1,1 @@
+# TODO: Handles move validation, check, and checkmate detection.

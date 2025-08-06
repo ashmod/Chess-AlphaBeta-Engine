@@ -1,0 +1,1 @@
+# TODO: Defines base and specific piece classes (Pawn, Rook, etc.)

@@ -1,0 +1,1 @@
+# TODO: Stores UI-related constants like colors, sizes, and frame rates

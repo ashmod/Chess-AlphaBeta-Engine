@@ -1,0 +1,1 @@
+# TODO: Manages the board's state and piece positions
