@@ -10,6 +10,7 @@ core.Board exposes a specific method to get material/mapped pieces
 (e.g., piece_map() in python-chess), adapt the helper `iter_pieces`.
 """
 from typing import Any, Iterable, Tuple
+import chess
 
 # Simple material values
 PIECE_VALUES = {
@@ -34,6 +35,17 @@ def _iter_pieces(board: Any) -> Iterable[Tuple[str, bool, Any]]:
     for the piece type (uppercase for white, lowercase or sign provided) —
     otherwise adapt this function for your core.Board representation.
     """
+    # Check for python-chess ChessBoard
+    if hasattr(board, "board") and isinstance(board.board, chess.Board):
+        chess_board = board.board
+        for sq in chess.SQUARES:
+            piece = chess_board.piece_at(sq)
+            if piece is not None:
+                sym = piece.symbol()
+                is_white = sym.isupper()
+                yield sym.upper(), is_white, sq
+        return
+        
     # 1) python-chess-like: piece_map() -> {sq: Piece}
     if hasattr(board, "piece_map"):
         for sq, piece in board.piece_map().items():
@@ -103,11 +115,17 @@ def mobility_score(board: Any) -> float:
     If board exposes generate_legal_moves() or legal_moves, we use them.
     """
     def count_moves_for(turn_value) -> int:
+        # Check for python-chess board
+        if hasattr(board, "board") and isinstance(board.board, chess.Board):
+            return len(list(board.board.legal_moves))
+            
         if hasattr(board, "generate_legal_moves"):
             return len(list(board.generate_legal_moves()))
         if hasattr(board, "legal_moves"):
             lm = board.legal_moves
             return len(list(lm)) if not isinstance(lm, list) else len(lm)
+        if hasattr(board, "get_legal_moves"):
+            return len(list(board.get_legal_moves()))
         # fallback
         return 0
 

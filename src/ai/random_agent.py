@@ -3,6 +3,7 @@ Simple random agent that selects uniformly from legal moves.
 """
 from typing import Any, List
 import random
+import chess
 from .agent import Agent
 
 
@@ -26,10 +27,14 @@ class RandomAgent(Agent):
         elif hasattr(board, "get_legal_moves"):
             moves = list(board.get_legal_moves())
         else:
-            raise AttributeError(
-                "Board object does not expose a legal-move generator.\n"
-                "Expected one of: generate_legal_moves(), legal_moves, get_legal_moves()."
-            )
+            # Try python-chess Board or ChessBoard class
+            if hasattr(board, "board") and isinstance(board.board, chess.Board):
+                moves = list(board.board.legal_moves)
+            else:
+                raise AttributeError(
+                    "Board object does not expose a legal-move generator.\n"
+                    "Expected one of: generate_legal_moves(), legal_moves, get_legal_moves()."
+                )
 
         if not moves:
             return None

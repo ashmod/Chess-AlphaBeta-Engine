@@ -17,6 +17,7 @@ Notes on expected Board API (the methods used below):
 from __future__ import annotations
 from typing import Any, Callable, List, Optional, Tuple
 import math
+import chess
 
 from .agent import Agent
 from .evaluation import evaluate
@@ -42,10 +43,20 @@ class AlphaBetaAgent(Agent):
         # move ordering: try captures first if possible
         moves = _order_moves(board, moves)
 
+        # Use the proper board object for push/pop operations
+        chess_board = _get_chess_board(board)
+        
         for move in moves:
-            board.push(move)
+            # Push the move
+            if isinstance(move, chess.Move):
+                chess_board.push(move)
+            else:
+                chess_board.push_uci(str(move))
+                
             score = -self._negamax(board, self.depth - 1, -beta, -alpha)
-            board.pop()
+            
+            # Pop the move
+            chess_board.pop()
 
             if score > best_score:
                 best_score = score
@@ -74,10 +85,20 @@ class AlphaBetaAgent(Agent):
         moves = list(_get_legal_moves(board))
         moves = _order_moves(board, moves)
 
+        # Use the proper board object for push/pop operations
+        chess_board = _get_chess_board(board)
+        
         for move in moves:
-            board.push(move)
+            # Push the move
+            if isinstance(move, chess.Move):
+                chess_board.push(move)
+            else:
+                chess_board.push_uci(str(move))
+                
             val = -self._negamax(board, depth - 1, -beta, -alpha)
-            board.pop()
+            
+            # Pop the move
+            chess_board.pop()
 
             if val > max_score:
                 max_score = val
@@ -91,7 +112,17 @@ class AlphaBetaAgent(Agent):
 
 # -------------------- Helper functions --------------------
 
+def _get_chess_board(board: Any) -> chess.Board:
+    """Get the underlying chess.Board from a board object."""
+    if isinstance(board, chess.Board):
+        return board
+    elif hasattr(board, "board") and isinstance(board.board, chess.Board):
+        return board.board
+    else:
+        raise AttributeError("Board object does not have a valid chess.Board instance.")
+
 def _get_legal_moves(board: Any):
+    """Get legal moves from a board object."""
     if hasattr(board, "generate_legal_moves"):
         return board.generate_legal_moves()
     if hasattr(board, "legal_moves"):
@@ -99,12 +130,23 @@ def _get_legal_moves(board: Any):
         return lm if isinstance(lm, list) else list(lm)
     if hasattr(board, "get_legal_moves"):
         return board.get_legal_moves()
+    
+    # Try python-chess Board or ChessBoard class
+    if hasattr(board, "board") and isinstance(board.board, chess.Board):
+        return board.board.legal_moves
+        
     raise AttributeError("Board object must provide a legal-move iterator.")
 
 
 def _is_checkmate(board: Any) -> bool:
+    """Check if the board is in checkmate."""
     if hasattr(board, "is_checkmate"):
         return board.is_checkmate()
+        
+    # Try python-chess Board or ChessBoard class
+    if hasattr(board, "board") and isinstance(board.board, chess.Board):
+        return board.board.is_checkmate()
+        
     # fallback: no legal moves + in_check
     try:
         moves = list(_get_legal_moves(board))
@@ -116,8 +158,14 @@ def _is_checkmate(board: Any) -> bool:
 
 
 def _is_stalemate(board: Any) -> bool:
+    """Check if the board is in stalemate."""
     if hasattr(board, "is_stalemate"):
         return board.is_stalemate()
+        
+    # Try python-chess Board or ChessBoard class
+    if hasattr(board, "board") and isinstance(board.board, chess.Board):
+        return board.board.is_stalemate()
+        
     try:
         moves = list(_get_legal_moves(board))
         if len(moves) == 0 and hasattr(board, "is_in_check"):
@@ -134,8 +182,17 @@ def _order_moves(board: Any, moves: List[Any]) -> List[Any]:
     move.captured_piece or move.is_capture or move.capture from core.Move type.
     If none exists, returns moves unmodified.
     """
-
     def _move_score(m):
+        # Handle python-chess Move objects
+        if isinstance(m, chess.Move):
+            try:
+                if hasattr(board, "board") and isinstance(board.board, chess.Board):
+                    return 100 if board.board.is_capture(m) else 0
+                elif isinstance(board, chess.Board):
+                    return 100 if board.is_capture(m) else 0
+            except Exception:
+                pass
+                
         # captures first
         if hasattr(m, "is_capture"):
             return 100 if getattr(m, "is_capture") else 0
