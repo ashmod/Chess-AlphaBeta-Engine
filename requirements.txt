@@ -1,4 +1,4 @@
 # Chess engine dependencies
 chess==1.9.4  # python-chess library
-pygame==2.5.2  # For GUI
-numpy==1.26.0  # For AI/evaluation
+pygame==2.6.1  # For GUI
+numpy>=2.0.0,<3.0.0  # For AI/evaluation

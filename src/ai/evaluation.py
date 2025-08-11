@@ -9,7 +9,7 @@ this module tries to support a couple of common access patterns. If
 core.Board exposes a specific method to get material/mapped pieces
 (e.g., piece_map() in python-chess), adapt the helper `iter_pieces`.
 """
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable, Tuple, Callable, Dict
 import chess
 
 # Simple material values
@@ -133,13 +133,51 @@ def mobility_score(board: Any) -> float:
     return moves / 10.0
 
 
-def evaluate(board: Any) -> float:
-    """Combined evaluation used by the alpha-beta engine.
+def evaluate_material(board: Any) -> float:
+    """Material only (baseline)."""
+    return material_score(board)
 
-    Weighted sum of material and mobility. Tweak coefficients to change
-    playing style. Returns positive for White advantage.
+
+def evaluate_material_mobility(board: Any) -> float:
+    """Material + small mobility bonus (legacy default)."""
+    mat = material_score(board)
+    mob = mobility_score(board)
+    return mat * 1.0 + mob * 0.1
+
+
+def evaluate_aggressive(board: Any) -> float:
+    """Material + higher mobility weight + central occupation bonus.
+
+    Central occupation encourages quick development / center control.
     """
     mat = material_score(board)
     mob = mobility_score(board)
-    # coefficients (tuneable): material dominant
-    return mat * 1.0 + mob * 0.1
+    center_bonus = 0.0
+    try:
+        if hasattr(board, "board") and isinstance(board.board, chess.Board):
+            cb = board.board
+            centers = [chess.D4, chess.E4, chess.D5, chess.E5]
+            for sq in centers:
+                p = cb.piece_at(sq)
+                if p:
+                    center_bonus += 0.15 if p.color == chess.WHITE else -0.15
+    except Exception:
+        pass
+    return mat * 1.0 + mob * 0.25 + center_bonus
+
+
+# Backwards-compatible default evaluate symbol (material+mobility)
+def evaluate(board: Any) -> float:  # type: ignore
+    return evaluate_material_mobility(board)
+
+
+EVAL_FUNCTIONS: Dict[str, Callable[[Any], float]] = {
+    "material": evaluate_material,
+    "mat_mob": evaluate_material_mobility,
+    "aggressive": evaluate_aggressive,
+}
+
+
+def get_eval_function(key: str) -> Callable[[Any], float]:
+    """Return evaluation function by key; fallback to default evaluate."""
+    return EVAL_FUNCTIONS.get(key, evaluate)

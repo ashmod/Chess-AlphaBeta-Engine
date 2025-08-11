@@ -20,13 +20,16 @@ import math
 import chess
 
 from .agent import Agent
-from .evaluation import evaluate
+from .evaluation import evaluate, get_eval_function
 
 
 class AlphaBetaAgent(Agent):
-    def __init__(self, depth: int = 4, name: str | None = None) -> None:
-        super().__init__(name=name or f"AlphaBeta(depth={depth})")
+    def __init__(self, depth: int = 4, eval_key: str = "mat_mob", use_move_ordering: bool = True, name: str | None = None) -> None:
         self.depth = depth
+        self.eval_key = eval_key
+        self.eval_func = get_eval_function(eval_key)
+        self.use_move_ordering = use_move_ordering
+        super().__init__(name=name or f"AlphaBeta(d={depth},eval={eval_key},ord={'Y' if use_move_ordering else 'N'})")
 
     def select_move(self, board: Any) -> Any:
         """Return the best move found by alpha-beta search from `board`.
@@ -40,8 +43,8 @@ class AlphaBetaAgent(Agent):
         beta = math.inf
 
         moves = list(_get_legal_moves(board))
-        # move ordering: try captures first if possible
-        moves = _order_moves(board, moves)
+        if self.use_move_ordering:
+            moves = _order_moves(board, moves)
 
         # Use the proper board object for push/pop operations
         chess_board = _get_chess_board(board)
@@ -79,11 +82,12 @@ class AlphaBetaAgent(Agent):
             return 0.0  # draw
 
         if depth <= 0:
-            return evaluate(board)
+            return self.eval_func(board)
 
         max_score = -math.inf
         moves = list(_get_legal_moves(board))
-        moves = _order_moves(board, moves)
+        if self.use_move_ordering:
+            moves = _order_moves(board, moves)
 
         # Use the proper board object for push/pop operations
         chess_board = _get_chess_board(board)
@@ -107,7 +111,7 @@ class AlphaBetaAgent(Agent):
             if alpha >= beta:
                 # pruning
                 break
-        return max_score if max_score != -math.inf else evaluate(board)
+        return max_score if max_score != -math.inf else self.eval_func(board)
 
 
 # -------------------- Helper functions --------------------

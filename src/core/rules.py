@@ -130,6 +130,27 @@ class ChessRules:
         if not ChessRules.is_game_over(board):
             return "*"
         return board.board.result()
+
+    @staticmethod
+    def get_custom_result(board, stalemate_as_win: bool = False):
+        """Return result with optional variant rules.
+
+        Args:
+            board (ChessBoard): board wrapper
+            stalemate_as_win (bool): if True, treat stalemate as a win for the player
+                who would otherwise claim the draw (i.e. for the side that just
+                delivered stalemate). In stalemate the side to move is the one
+                with no legal moves; we award the opposite side the win.
+
+        Returns:
+            str: result string ("1-0", "0-1", "1/2-1/2", or "*")
+        """
+        if not board.board.is_game_over():
+            return "*"
+        if stalemate_as_win and board.board.is_stalemate():
+            # Side to move is stuck and loses
+            return "0-1" if board.board.turn == chess.WHITE else "1-0"
+        return board.board.result()
     
     @staticmethod
     def get_game_end_reason(board):

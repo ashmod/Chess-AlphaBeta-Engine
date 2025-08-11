@@ -20,7 +20,7 @@ def main():
     parser.add_argument('--no-gui', action='store_true', help='Run in text mode (no GUI)')
     parser.add_argument('--replay', type=str, help='Load and replay a saved game file')
     parser.add_argument('--ai', choices=['random', 'alphabeta'], default='random', 
-                      help='AI algorithm to use (default: random)')
+                      help='AI algorithm to use in CLI/text mode (default: random)')
     parser.add_argument('--depth', type=int, default=3,
                       help='Search depth for alphabeta AI (default: 3)')
     args = parser.parse_args()
@@ -108,9 +108,9 @@ def main():
             print(f"Failed to load replay: {args.replay}")
     
     else:
-        # GUI mode
-        from src.gui.game_ui import ChessGUI
-        ChessGUI().run()
+        # GUI mode with start screen
+        from src.gui import App
+        App().run()
 
 if __name__ == "__main__":
     main()

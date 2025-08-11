@@ -30,6 +30,12 @@ class GameIO:
             bool: True if the save was successful, False otherwise.
         """
         try:
+            # Ensure we're saving to the top-level replays folder, not a subdirectory
+            if filepath.startswith('replays') and '\\' in filepath[8:]:  # After 'replays\'
+                base_dir = 'replays'
+                filename = os.path.basename(filepath)
+                filepath = os.path.join(base_dir, filename)
+                
             # Create the directory if it doesn't exist
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             
@@ -52,9 +58,24 @@ class GameIO:
             dict: Game data, or None if loading failed.
         """
         try:
+            print(f"Attempting to load game from: {filepath}")
             with open(filepath, 'r') as f:
                 game_data = json.load(f)
+                
+            # Validate that we have moves in the data
+            if "moves" in game_data:
+                print(f"Successfully loaded game with {len(game_data['moves'])} moves")
+                print(f"First few moves: {game_data['moves'][:min(5, len(game_data['moves']))]}")
+            else:
+                print(f"Warning: Loaded game data doesn't contain moves")
+                
             return game_data
+        except json.JSONDecodeError as je:
+            print(f"JSON decode error loading game from {filepath}: {je}")
+            return None
+        except FileNotFoundError as fe:
+            print(f"File not found: {filepath}")
+            return None
         except Exception as e:
             print(f"Error loading game: {e}")
             return None
