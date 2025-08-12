@@ -15,6 +15,7 @@ Limitations / Future improvements:
 
 from __future__ import annotations
 import time
+import threading
 import pygame
 import chess
 import re
@@ -80,10 +81,16 @@ class ChessGUI:
 			self.ai_white = AlphaBetaAgent(depth=depth)
 			self.ai_black = AlphaBetaAgent(depth=depth)
 		self.pending_ai_move: Optional[Tuple[chess.Move, float]] = None  # (move, ready_time)
+		# Async AI search state
+		self.ai_thread: Optional[threading.Thread] = None
+		self.ai_thread_result: Optional[chess.Move] = None
+		self.ai_thinking: bool = False
+		self.ai_thread_generation: int = -1  # move history length when search started
+		self.ai_search_side: Optional[bool] = None
+		self.ai_start_time: float = 0.0
 		# Schedule initial AI move if white not human
 		if not self.human_white:
-			first_move = self._compute_ai_move()
-			self.pending_ai_move = (first_move, time.time() + AI_MOVE_DELAY_MS / 1000.0)
+			self._start_ai_search()
 
 		# Dynamic layout attributes
 		self.square_size = SQUARE_SIZE  # will be recomputed
@@ -193,6 +200,9 @@ class ChessGUI:
 			return
 		if not self._is_human_turn():
 			return  # waiting for AI side
+		# Disallow interaction while an AI search thread is finishing
+		if self.ai_thinking:
+			return
 		file = (mx - self.board_left) // self.square_size
 		rank = 7 - ((my - self.board_top) // self.square_size)
 		square = chess.square(file, rank)
@@ -226,9 +236,9 @@ class ChessGUI:
 				self._update_status()
 				self.selected_square = None
 				self.legal_destinations = []
-				# schedule AI move
+				# schedule AI move (async search)
 				if not self.board.board.is_game_over() and not self._is_human_turn():
-					self.pending_ai_move = (self._compute_ai_move(), time.time() + AI_MOVE_DELAY_MS / 1000.0)
+					self._start_ai_search()
 			else:
 				# new selection if own piece else clear
 				if piece and piece.color == self.board.board.turn:
@@ -287,6 +297,7 @@ class ChessGUI:
 		return agent.select_move(self.board.board)
 
 	def _maybe_trigger_ai(self):
+		# 1. If we have a pending (already computed) move, push it when ready
 		if self.pending_ai_move:
 			move, ready_time = self.pending_ai_move
 			if time.time() >= ready_time:
@@ -296,13 +307,50 @@ class ChessGUI:
 					self._record_move(move)
 				self.pending_ai_move = None
 				self._update_status()
-				# Chain next AI move if other side also AI
+				# Start next search if other side also AI
 				if not self.board.board.is_game_over() and not self._is_human_turn():
-					self.pending_ai_move = (self._compute_ai_move(), time.time() + AI_MOVE_DELAY_MS / 1000.0)
-		else:
-			# If idle and it's AI turn schedule immediately (covers resume after undo)
-			if not self.board.board.is_game_over() and not self._is_human_turn():
-				self.pending_ai_move = (self._compute_ai_move(), time.time() + AI_MOVE_DELAY_MS / 1000.0)
+					self._start_ai_search()
+			return
+		# 2. If an AI search is running, poll for completion
+		if self.ai_thinking and self.ai_thread and not self.ai_thread.is_alive():
+			# Finished
+			move = self.ai_thread_result
+			self.ai_thinking = False
+			self.ai_thread = None
+			if move and not self.board.board.is_game_over():
+				# Validate generation (ensure board unchanged since search started)
+				if self.ai_thread_generation == len(self.move_history) and self.board.board.turn == self.ai_search_side:
+					# schedule slight delay to show move
+					self.pending_ai_move = (move, time.time() + AI_MOVE_DELAY_MS / 1000.0)
+				else:
+					# Discard stale result
+					pass
+			return
+		# 3. If idle and it's AI turn, start a search
+		if not self.board.board.is_game_over() and not self._is_human_turn() and not self.ai_thinking:
+			self._start_ai_search()
+
+	def _start_ai_search(self):
+		"""Spawn a background thread to compute the next AI move without freezing UI."""
+		if self.ai_thinking or self.pending_ai_move:
+			return
+		self.ai_thinking = True
+		self.ai_thread_result = None
+		self.ai_thread_generation = len(self.move_history)
+		self.ai_search_side = self.board.board.turn
+		self.ai_start_time = time.time()
+		fen = self.board.board.fen()
+		agent = self.ai_white if self.ai_search_side == chess.WHITE else self.ai_black
+		def worker(fen_snapshot: str, agent_ref):
+			try:
+				local_board = chess.Board(fen_snapshot)
+				move = agent_ref.select_move(local_board)
+				self.ai_thread_result = move
+			except Exception as e:
+				print(f"AI search error: {e}")
+				self.ai_thread_result = None
+		self.ai_thread = threading.Thread(target=worker, args=(fen, agent), daemon=True)
+		self.ai_thread.start()
 
 	# ------------------- Game state helpers -------------------
 	def _record_move(self, move: chess.Move):
@@ -329,7 +377,8 @@ class ChessGUI:
 			self.status_message = "White to move" if self.board.board.turn else "Black to move"
 
 	def _undo_move(self):
-		if self.move_history and not self.pending_ai_move:
+		# Disallow undo while AI is thinking or move about to be applied
+		if self.move_history and not self.pending_ai_move and not self.ai_thinking:
 			# If last move was AI + player, undo both to revert to player's turn
 			if len(self.move_history) >= 2:
 				self.board.board.pop()
@@ -350,7 +399,7 @@ class ChessGUI:
 		self.pending_ai_move = None
 		self.game_saved = False
 		if not self.human_white:
-			self.pending_ai_move = (self._compute_ai_move(), time.time() + AI_MOVE_DELAY_MS / 1000.0)
+			self._start_ai_search()
 		self._update_status()
 
 	# ------------------- Drawing -------------------
@@ -529,6 +578,12 @@ class ChessGUI:
 			status_lines = _wrap(self.status_message, small, panel_rect.width - 40)
 		except Exception:
 			status_lines = [self.status_message]
+		# Append dynamic thinking spinner if AI searching
+		if self.ai_thinking and not self.board.board.is_game_over():
+			elapsed = time.time() - self.ai_start_time
+			dots = int((elapsed * 2) % 4)
+			spinner = 'Thinking' + '.' * dots
+			status_lines.append(spinner)
 		y = status_start_y
 		for line in status_lines:
 			txt = small.render(line, True, COLOR_TEXT)
