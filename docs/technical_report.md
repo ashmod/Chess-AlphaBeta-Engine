@@ -430,12 +430,12 @@ The exponential growth follows the expected pattern: $T(d+1) ≈ b \cdot T(d)$ w
 
 ### 10.1 Search Algorithm Improvements
 
-1. **Transposition Tables**: Hash-based position caching
-   $$\text{hash}(S) \rightarrow \{\text{depth}, \text{score}, \text{bound}, \text{best\_move}\}$$
+1. **Transposition Tables**: Hash-based position caching <br />
+   $$\text{hash}(S) \rightarrow \{\text{depth}, \text{score}, \text{bound}, \text{best move}\}$$
 
-2. **Quiescence Search**: Extend search in tactical positions
-3. **Iterative Deepening**: Progressive depth increase with time control
-4. **Move Ordering Enhancements**: 
+3. **Quiescence Search**: Extend search in tactical positions
+4. **Iterative Deepening**: Progressive depth increase with time control
+5. **Move Ordering Enhancements**: 
    - Killer moves heuristic
    - History heuristic
    - Principal Variation move ordering
