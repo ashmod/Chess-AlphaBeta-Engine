@@ -7,12 +7,6 @@ Key features implemented:
 - simple move ordering: captures (if move.captured_piece exists) are searched first
 - detection of terminal states using board.is_checkmate() and board.is_stalemate()
 
-Notes on expected Board API (the methods used below):
-- generate_legal_moves() -> iterable of Move objects
-- push(move) and pop() -> mutate and rollback board state
-- is_checkmate(), is_stalemate() -> booleans
-- turn -> Truthy for White (or string 'white'/'black')
-
 """
 from __future__ import annotations
 from typing import Any, Callable, List, Optional, Tuple
@@ -45,8 +39,7 @@ class AlphaBetaAgent(Agent):
         moves = list(_get_legal_moves(board))
         if self.use_move_ordering:
             moves = _order_moves(board, moves)
-
-        # Use the proper board object for push/pop operations
+ 
         chess_board = _get_chess_board(board)
         
         for move in moves:

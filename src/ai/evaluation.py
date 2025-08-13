@@ -4,10 +4,6 @@ Heuristic evaluation functions for chess positions.
 The evaluation returns a positive value when
 the position favors White, negative when it favors Black.
 
-Because different board implementations name piece types differently,
-this module tries to support a couple of common access patterns. If
-core.Board exposes a specific method to get material/mapped pieces
-(e.g., piece_map() in python-chess), adapt the helper `iter_pieces`.
 """
 from typing import Any, Iterable, Tuple, Callable, Dict
 import chess
@@ -24,13 +20,7 @@ PIECE_VALUES = {
 
 
 def _iter_pieces(board: Any) -> Iterable[Tuple[str, bool, Any]]:
-    """Yield (piece_symbol, is_white, square) for every piece on board.
-
-    Tries a few common APIs:
-    - board.piece_map() -> {square: piece}
-    - board.board (2D array of piece or None)
-    - board.get_pieces() or board.pieces()
-
+    """Iterate over pieces on the board.
     The `piece_symbol` must be a one-letter code like 'P','N','B','R','Q','K'
     for the piece type (uppercase for white, lowercase or sign provided) —
     otherwise adapt this function for your core.Board representation.

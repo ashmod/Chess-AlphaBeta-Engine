@@ -1,1 +1,0 @@
-# TODO: A script to run batch simulations (e.g., AI vs. AI)

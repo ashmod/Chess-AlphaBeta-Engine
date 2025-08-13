@@ -13,11 +13,9 @@ class RandomAgent(Agent):
         self._rng = random.Random(seed)
 
     def select_move(self, board: Any) -> Any:
-        """Select a legal move uniformly at random.
-
-        Expects board.generate_legal_moves() or board.legal_moves to exist.
         """
-        # Try different common APIs for retrieving legal moves
+        Select a legal move uniformly at random.
+        """
         moves = None
         if hasattr(board, "generate_legal_moves"):
             moves = list(board.generate_legal_moves())
@@ -27,7 +25,6 @@ class RandomAgent(Agent):
         elif hasattr(board, "get_legal_moves"):
             moves = list(board.get_legal_moves())
         else:
-            # Try python-chess Board or ChessBoard class
             if hasattr(board, "board") and isinstance(board.board, chess.Board):
                 moves = list(board.board.legal_moves)
             else:
