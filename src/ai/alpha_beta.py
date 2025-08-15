@@ -1,7 +1,7 @@
 """
 Alpha-Beta pruned search implementation.
 
-Key features implemented:
+Key features:
 - configurable search depth
 - alpha-beta pruning
 - simple move ordering: captures (if move.captured_piece exists) are searched first
@@ -128,7 +128,6 @@ def _get_legal_moves(board: Any):
     if hasattr(board, "get_legal_moves"):
         return board.get_legal_moves()
     
-    # Try python-chess Board or ChessBoard class
     if hasattr(board, "board") and isinstance(board.board, chess.Board):
         return board.board.legal_moves
         
@@ -140,7 +139,6 @@ def _is_checkmate(board: Any) -> bool:
     if hasattr(board, "is_checkmate"):
         return board.is_checkmate()
         
-    # Try python-chess Board or ChessBoard class
     if hasattr(board, "board") and isinstance(board.board, chess.Board):
         return board.board.is_checkmate()
         
@@ -159,7 +157,6 @@ def _is_stalemate(board: Any) -> bool:
     if hasattr(board, "is_stalemate"):
         return board.is_stalemate()
         
-    # Try python-chess Board or ChessBoard class
     if hasattr(board, "board") and isinstance(board.board, chess.Board):
         return board.board.is_stalemate()
         
