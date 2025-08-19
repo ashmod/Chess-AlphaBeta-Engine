@@ -70,7 +70,6 @@ class AlphaBetaAgent(Agent):
             if score > alpha:
                 alpha = score
 
-        # Simple tie-breaking: prefer captures, then random
         if len(best_moves) > 1:
             captures = []
             for move in best_moves:
@@ -86,10 +85,8 @@ class AlphaBetaAgent(Agent):
         """Negamax variant of minimax with alpha-beta pruning and transposition table."""
         chess_board = _get_chess_board(board)
         
-        # Generate position hash for transposition table
         position_hash = chess_board.fen().__hash__()
         
-        # Check transposition table
         if position_hash in self.transposition_table:
             entry = self.transposition_table[position_hash]
             if entry.depth >= depth:
