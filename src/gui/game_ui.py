@@ -49,7 +49,7 @@ class MoveRecord:
 
 
 class ChessGUI:
-	def __init__(self, ai: str = 'alphabeta', depth: int = 3, human_plays_white: bool = True, human_plays_black: bool = False, autosave: bool = True, label: str = "Game"):
+	def __init__(self, ai: str = 'alphabeta', human_plays_white: bool = True, human_plays_black: bool = False, autosave: bool = True, label: str = "Game", ai_white = RandomAgent(), ai_black = RandomAgent()):
 		# Reuse existing display if already created (App sets RESIZABLE)
 		if not pygame.get_init():
 			pygame.init()
@@ -71,15 +71,8 @@ class ChessGUI:
 		self.game_saved = False
 		self.label = label
 		# Determine AI type for sides
-		if ai == 'random':
-			self.ai_white = RandomAgent()
-			self.ai_black = RandomAgent()
-		elif ai == 'mixed_random_alphabeta':
-			self.ai_white = RandomAgent()
-			self.ai_black = AlphaBetaAgent(depth=depth)
-		else:
-			self.ai_white = AlphaBetaAgent(depth=depth)
-			self.ai_black = AlphaBetaAgent(depth=depth)
+		self.ai_white = ai_white
+		self.ai_black = ai_black
 		self.pending_ai_move: Optional[Tuple[chess.Move, float]] = None  # (move, ready_time)
 		# Async AI search state
 		self.ai_thread: Optional[threading.Thread] = None
@@ -1261,6 +1254,9 @@ class AlphaBetaConfig:
 		self.depth = depth
 		self.eval_key = eval_key
 		self.ordering = ordering
+	
+	def agent(self):
+		return AlphaBetaAgent(depth=self.depth, eval_key=self.eval_key, use_move_ordering=self.ordering)
 
 
 class ConfigScreen:
@@ -1691,7 +1687,6 @@ class App:
 						self._save_last_window_size()
 						break
 					continue  # Return to main start screen
-				depth = 3 if agent == 'alphabeta' else 1
 				label = 'Human vs Alpha-Beta' if agent == 'alphabeta' else 'Human vs Random'
 				ab_conf = None
 				if agent == 'alphabeta':
@@ -1703,7 +1698,7 @@ class App:
 							break
 						continue
 					ab_conf = res_conf
-				game = ChessGUI(ai=agent, depth=(ab_conf.depth if ab_conf else depth), human_plays_white=True, human_plays_black=False, label=label)
+				game = ChessGUI(ai=agent, human_plays_white=True, human_plays_black=False, label=label, ai_black = ab_conf.agent() if agent == 'alphabeta' else RandomAgent())
 				# Store chosen eval/order for ChessGUI instantiation (extend constructor later if needed)
 				if isinstance(game.ai_black, AlphaBetaAgent) and ab_conf:
 					game.ai_black.depth = ab_conf.depth
@@ -1724,7 +1719,7 @@ class App:
 					continue
 				if matchup == 'random':
 					label = 'AI vs AI (Random)'
-					game = ChessGUI(ai='random', depth=1, human_plays_white=False, human_plays_black=False, label=label)
+					game = ChessGUI(ai='random', human_plays_white=False, human_plays_black=False, label=label)
 				elif matchup == 'alphabeta':
 					# Two config screens (white and black)
 					conf_w = ConfigScreen(self.screen, title='Configure Alpha-Beta (White)')
@@ -1742,18 +1737,8 @@ class App:
 							break
 						continue
 					label = 'AI vs AI (Alpha-Beta vs Alpha-Beta)'
-					game = ChessGUI(ai='alphabeta', depth=cb.depth, human_plays_white=False, human_plays_black=False, label=label)
-					# configure both agents
-					if isinstance(game.ai_white, AlphaBetaAgent):
-						game.ai_white.depth = cw.depth
-						game.ai_white.eval_key = cw.eval_key
-						game.ai_white.eval_func = get_eval_function(cw.eval_key)
-						game.ai_white.use_move_ordering = cw.ordering
-					if isinstance(game.ai_black, AlphaBetaAgent):
-						game.ai_black.depth = cb.depth
-						game.ai_black.eval_key = cb.eval_key
-						game.ai_black.eval_func = get_eval_function(cb.eval_key)
-						game.ai_black.use_move_ordering = cb.ordering
+					game = ChessGUI(ai='alphabeta', human_plays_white=False, human_plays_black=False, label=label, ai_white=cw.agent(), ai_black=cb.agent())
+
 				elif matchup == 'mixed':
 					# Configure the alpha-beta (Black) only
 					conf_b = ConfigScreen(self.screen, title='Configure Alpha-Beta (Black)')
@@ -1764,12 +1749,7 @@ class App:
 							break
 						continue
 					label = 'AI vs AI (Random White vs Alpha-Beta Black)'
-					game = ChessGUI(ai='mixed_random_alphabeta', depth=cb.depth, human_plays_white=False, human_plays_black=False, label=label)
-					if isinstance(game.ai_black, AlphaBetaAgent):
-						game.ai_black.depth = cb.depth
-						game.ai_black.eval_key = cb.eval_key
-						game.ai_black.eval_func = get_eval_function(cb.eval_key)
-						game.ai_black.use_move_ordering = cb.ordering
+					game = ChessGUI(ai='mixed_random_alphabeta', human_plays_white=False, human_plays_black=False, label=label, ai_black=cb.agent())
 				else:
 					continue
 				res = game.run()
