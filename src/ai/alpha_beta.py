@@ -67,6 +67,12 @@ class AlphaBetaAgent(Agent):
 
         Returns the evaluation from the perspective of the current player.
         """
+        # NOTE (investigation):
+        # Historically this project returned evaluation values from White's
+        # perspective (positive = good for White). Negamax requires values to
+        # be expressed from the side-to-move perspective (current player), so
+        # a conversion is necessary at leaf nodes (and in any fallback return)
+        
         # Terminal checks
         if _is_checkmate(board):
             # if current side to move is checkmated -> very bad
@@ -75,7 +81,13 @@ class AlphaBetaAgent(Agent):
             return 0.0  # draw
 
         if depth <= 0:
-            return self.eval_func(board)
+            # Evaluation functions return a value from White's perspective
+            # Negamax expects the result to be from the perspective of the
+            # current side to move. Convert the white-perspective evaluation
+            # to side-to-move perspective here.
+            cb = _get_chess_board(board)
+            ev = self.eval_func(board)
+            return ev if cb.turn == chess.WHITE else -ev
 
         max_score = -math.inf
         moves = list(_get_legal_moves(board))
@@ -104,7 +116,13 @@ class AlphaBetaAgent(Agent):
             if alpha >= beta:
                 # pruning
                 break
-        return max_score if max_score != -math.inf else self.eval_func(board)
+        # If no moves were evaluated (shouldn't normally happen), return
+        # a side-to-move perspective evaluation as a fallback.
+        if max_score != -math.inf:
+            return max_score
+        cb = _get_chess_board(board)
+        ev = self.eval_func(board)
+        return ev if cb.turn == chess.WHITE else -ev
 
 
 # -------------------- Helper functions --------------------
