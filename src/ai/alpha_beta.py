@@ -1,20 +1,30 @@
 """
-Alpha-Beta pruned search implementation.
+Alpha-Beta pruned search implementation with transposition table.
 
 Key features:
 - configurable search depth
-- alpha-beta pruning
-- simple move ordering: captures (if move.captured_piece exists) are searched first
-- detection of terminal states using board.is_checkmate() and board.is_stalemate()
+- alpha-beta pruning with transposition table for speed
+- simple move ordering: captures first
+- detection of terminal states and repetitions
+- transposition table prevents infinite loops and speeds up search
 
 """
 from __future__ import annotations
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, Dict
 import math
+import random
 import chess
 
 from .agent import Agent
 from .evaluation import evaluate, get_eval_function
+
+
+class TranspositionEntry:
+    """Entry in the transposition table."""
+    def __init__(self, value: float, depth: int, node_type: str = "exact"):
+        self.value = value
+        self.depth = depth
+        self.node_type = node_type  # "exact", "lower", "upper"
 
 
 class AlphaBetaAgent(Agent):
@@ -23,16 +33,16 @@ class AlphaBetaAgent(Agent):
         self.eval_key = eval_key
         self.eval_func = get_eval_function(eval_key)
         self.use_move_ordering = use_move_ordering
+        self.transposition_table: Dict[int, TranspositionEntry] = {}
         super().__init__(name=name or f"AlphaBeta(d={depth},eval={eval_key},ord={'Y' if use_move_ordering else 'N'})")
 
     def select_move(self, board: Any) -> Any:
-        """Return the best move found by alpha-beta search from `board`.
-
-        The returned move is the move object (from board.generate_legal_moves())
-        and should be acceptable by board.push(move).
-        """
+        """Return the best move found by alpha-beta search from `board`."""
+        # Clear transposition table for each new search to prevent stale entries
+        self.transposition_table.clear()
+        
         best_score = -math.inf
-        best_move = None
+        best_moves = []
         alpha = -math.inf
         beta = math.inf
 
@@ -43,86 +53,102 @@ class AlphaBetaAgent(Agent):
         chess_board = _get_chess_board(board)
         
         for move in moves:
-            # Push the move
             if isinstance(move, chess.Move):
                 chess_board.push(move)
             else:
                 chess_board.push_uci(str(move))
                 
             score = -self._negamax(board, self.depth - 1, -beta, -alpha)
-            
-            # Pop the move
             chess_board.pop()
 
             if score > best_score:
                 best_score = score
-                best_move = move
+                best_moves = [move]
+            elif abs(score - best_score) < 0.01:  # Consider moves within small threshold as equal
+                best_moves.append(move)
+                
             if score > alpha:
                 alpha = score
 
-        return best_move
+        # Simple tie-breaking: prefer captures, then random
+        if len(best_moves) > 1:
+            captures = []
+            for move in best_moves:
+                if isinstance(move, chess.Move) and chess_board.is_capture(move):
+                    captures.append(move)
+            if captures:
+                return random.choice(captures)
+            return random.choice(best_moves)
+        
+        return best_moves[0] if best_moves else None
 
     def _negamax(self, board: Any, depth: int, alpha: float, beta: float) -> float:
-        """Negamax variant of minimax with alpha-beta pruning.
-
-        Returns the evaluation from the perspective of the current player.
-        """
-        # NOTE (investigation):
-        # Historically this project returned evaluation values from White's
-        # perspective (positive = good for White). Negamax requires values to
-        # be expressed from the side-to-move perspective (current player), so
-        # a conversion is necessary at leaf nodes (and in any fallback return)
+        """Negamax variant of minimax with alpha-beta pruning and transposition table."""
+        chess_board = _get_chess_board(board)
+        
+        # Generate position hash for transposition table
+        position_hash = chess_board.fen().__hash__()
+        
+        # Check transposition table
+        if position_hash in self.transposition_table:
+            entry = self.transposition_table[position_hash]
+            if entry.depth >= depth:
+                if entry.node_type == "exact":
+                    return entry.value
+                elif entry.node_type == "lower" and entry.value >= beta:
+                    return entry.value
+                elif entry.node_type == "upper" and entry.value <= alpha:
+                    return entry.value
         
         # Terminal checks
         if _is_checkmate(board):
-            # if current side to move is checkmated -> very bad
             return -99999.0
         if _is_stalemate(board):
-            return 0.0  # draw
+            return 0.0
+        if chess_board.is_repetition() or chess_board.is_fivefold_repetition():
+            return 0.0  # Draw by repetition
+        if chess_board.is_fifty_moves() or chess_board.is_seventyfive_moves():
+            return 0.0  # Draw by move rule
 
         if depth <= 0:
-            # Evaluation functions return a value from White's perspective
-            # Negamax expects the result to be from the perspective of the
-            # current side to move. Convert the white-perspective evaluation
-            # to side-to-move perspective here.
-            cb = _get_chess_board(board)
+            # Evaluation from White's perspective, convert to current player perspective
             ev = self.eval_func(board)
-            return ev if cb.turn == chess.WHITE else -ev
+            result = ev if chess_board.turn == chess.WHITE else -ev
+            # Store in transposition table
+            self.transposition_table[position_hash] = TranspositionEntry(result, depth, "exact")
+            return result
 
+        original_alpha = alpha
         max_score = -math.inf
         moves = list(_get_legal_moves(board))
         if self.use_move_ordering:
             moves = _order_moves(board, moves)
-
-        # Use the proper board object for push/pop operations
-        chess_board = _get_chess_board(board)
         
         for move in moves:
-            # Push the move
             if isinstance(move, chess.Move):
                 chess_board.push(move)
             else:
                 chess_board.push_uci(str(move))
                 
             val = -self._negamax(board, depth - 1, -beta, -alpha)
-            
-            # Pop the move
             chess_board.pop()
 
-            if val > max_score:
-                max_score = val
-            if val > alpha:
-                alpha = val
+            max_score = max(max_score, val)
+            alpha = max(alpha, val)
             if alpha >= beta:
-                # pruning
-                break
-        # If no moves were evaluated (shouldn't normally happen), return
-        # a side-to-move perspective evaluation as a fallback.
-        if max_score != -math.inf:
-            return max_score
-        cb = _get_chess_board(board)
-        ev = self.eval_func(board)
-        return ev if cb.turn == chess.WHITE else -ev
+                break  # Beta cutoff
+
+        # Store result in transposition table
+        if max_score <= original_alpha:
+            node_type = "upper"
+        elif max_score >= beta:
+            node_type = "lower"
+        else:
+            node_type = "exact"
+        
+        self.transposition_table[position_hash] = TranspositionEntry(max_score, depth, node_type)
+        
+        return max_score if max_score != -math.inf else 0.0
 
 
 # -------------------- Helper functions --------------------
@@ -150,7 +176,6 @@ def _get_legal_moves(board: Any):
         return board.board.legal_moves
         
     raise AttributeError("Board object must provide a legal-move iterator.")
-
 
 def _is_checkmate(board: Any) -> bool:
     """Check if the board is in checkmate."""
@@ -188,30 +213,24 @@ def _is_stalemate(board: Any) -> bool:
 
 
 def _order_moves(board: Any, moves: List[Any]) -> List[Any]:
-    """Simple move ordering: prefer captures first, then others.
-
-    Expects move objects to carry some information about capture, e.g.,
-    move.captured_piece or move.is_capture or move.capture from core.Move type.
-    If none exists, returns moves unmodified.
-    """
+    """Simple move ordering: prefer captures first, then others."""
     def _move_score(m):
         # Handle python-chess Move objects
         if isinstance(m, chess.Move):
             try:
                 if hasattr(board, "board") and isinstance(board.board, chess.Board):
-                    return 100 if board.board.is_capture(m) else 0
+                    return 1000 if board.board.is_capture(m) else 0
                 elif isinstance(board, chess.Board):
-                    return 100 if board.is_capture(m) else 0
+                    return 1000 if board.is_capture(m) else 0
             except Exception:
                 pass
                 
-        # captures first
-        if hasattr(m, "is_capture"):
-            return 100 if getattr(m, "is_capture") else 0
+        # Check for other capture indicators
+        if hasattr(m, "is_capture") and getattr(m, "is_capture"):
+            return 1000
         if hasattr(m, "captured_piece") and getattr(m, "captured_piece") is not None:
-            # try to value capturing higher-value pieces
+            # Try to value capturing higher-value pieces
             cap = getattr(m, "captured_piece")
-            # cap could be a symbol or object with 'symbol' or 'kind'
             sym = None
             if isinstance(cap, str):
                 sym = cap
@@ -220,11 +239,12 @@ def _order_moves(board: Any, moves: List[Any]) -> List[Any]:
                 if callable(sym):
                     sym = sym()
             if sym:
-                # approximate value mapping
+                # Approximate value mapping
                 sym = sym.upper()
-                return {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9, "K": 100}.get(sym, 1)
-            return 1
-        # fallback
+                piece_value = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9, "K": 100}.get(sym, 1)
+                return 900 + piece_value
+            return 900
+        # Non-captures
         return 0
 
     try:
