@@ -2,7 +2,6 @@ include README.md
 include LICENSE
 include requirements.txt
 include main.py
-include move_replays.py
 
 recursive-include src *.py
 recursive-include src/gui/assets *
