@@ -160,11 +160,6 @@ Move ordering priority:
 1. **Captures**: Ordered by captured piece value (MVV-LVA approximation)
 2. **Non-captures**: Searched after all captures
 
-This ordering significantly improves the pruning factor $\beta$, where:
-
-$$\beta = \frac{\text{nodes without pruning}}{\text{nodes with pruning}}$$
-
-Empirical results show $\beta \approx 3-5$ for typical chess positions with good move ordering.
 
 ---
 
@@ -184,9 +179,9 @@ Where:
 
 #### 4.1.2 Mobility Evaluation
 
-$$E_{\text{mobility}}(S) = \frac{|A_{\text{white}}(S)| - |A_{\text{black}}(S)|}{10}$$
+$$E_{\text{mobility}}(S) = \frac{|A_{\text{white}}(S)| - |A_{\text{black}}(S)|}{|A_{\text{white}}(S)| + |A_{\text{black}}(S)|}$$
 
-This heuristic encourages piece activity and development.
+This heuristic encourages piece activity and development. The normalized score ensures a consistent evaluation scale, representing the proportion of control each player has over the available moves.
 
 #### 4.1.3 Positional Evaluation
 
@@ -242,14 +237,21 @@ The implementation uses careful memory management for search efficiency:
 
 ### 5.3 Threading Architecture
 
-GUI mode implements asynchronous AI computation:
+GUI mode implements asynchronous AI computation to maintain a responsive user interface. To ensure thread safety, the main GUI thread does not pass the active game board to the AI's search thread. Instead, it passes a **FEN (Forsyth-Edwards Notation)** string, which is a complete, self-contained snapshot of the board state at that instant. The AI thread then constructs a new, local board object from this FEN string to perform its search, preventing any conflicts or race conditions with the main thread.
 
 ```python
-def _compute_ai_move(self):
-    """Compute AI move in separate thread to maintain GUI responsiveness."""
-    side = self.board.board.turn
-    agent = self.ai_white if side == chess.WHITE else self.ai_black
-    return agent.select_move(self.board.board)
+def _start_ai_search(self):
+    """Spawns a background thread to compute the move without freezing the UI."""
+    fen_snapshot = self.board.board.fen() # Create a safe snapshot of the state
+    agent = self.ai_white if self.board.board.turn == chess.WHITE else self.ai_black
+    
+    # The worker thread operates on a copy of the board
+    def worker(fen, agent_ref):
+        local_board = chess.Board(fen)
+        self.ai_thread_result = agent_ref.select_move(local_board)
+
+    self.ai_thread = threading.Thread(target=worker, args=(fen_snapshot, agent))
+    self.ai_thread.start()
 ```
 
 ### 5.4 Error Handling and Robustness
@@ -404,8 +406,6 @@ The exponential growth follows the expected pattern: $T(d+1) ≈ b \cdot T(d)$ w
 ### 9.2 Current Limitations
 
 #### 9.2.1 Search Enhancements
-- **No Transposition Table**: Positions may be re-evaluated
-- **No Quiescence Search**: Horizon effect in tactical positions
 - **No Iterative Deepening**: Fixed-depth search only
 - **No Time Management**: No adaptive depth based on remaining time
 
@@ -430,12 +430,9 @@ The exponential growth follows the expected pattern: $T(d+1) ≈ b \cdot T(d)$ w
 
 ### 10.1 Search Algorithm Improvements
 
-1. **Transposition Tables**: Hash-based position caching <br />
-   $$\text{hash}(S) \rightarrow \{\text{depth}, \text{score}, \text{bound}, \text{best move}\}$$
-
-3. **Quiescence Search**: Extend search in tactical positions
-4. **Iterative Deepening**: Progressive depth increase with time control
-5. **Move Ordering Enhancements**: 
+1. **Quiescence Search**: Extend search in tactical positions
+2. **Iterative Deepening**: Progressive depth increase with time control
+3. **Move Ordering Enhancements**: 
    - Killer moves heuristic
    - History heuristic
    - Principal Variation move ordering
@@ -496,5 +493,5 @@ The implementation provides a solid foundation for advanced chess AI research wh
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: August 14, 2025
+**Document Version**: 1.1  
+**Last Updated**: August 20, 2025
